@@ -1,9 +1,9 @@
 // test/consignment-payout.test.js
-// Proves the store-credit payout on pickup is correct and idempotent: marking an order
-// picked up issues exactly one 50% payout per donor-owned item, and a repeat call (e.g.
-// a double-tap of "Mark Picked Up") does not double-pay. Requires a live DATABASE_URL —
-// this exercises markOrderPickedUp's real conditional-UPDATE guard against a real
-// Postgres instance, the same way test/cart-concurrency.test.js does.
+// Proves the payout timing split: marking an order picked up no longer issues credit
+// immediately — issueConsignmentPayouts only pays out an item once its 7-day return
+// window has fully elapsed (8 days past picked_up_at), and never twice. Requires a live
+// DATABASE_URL — this exercises markOrderPickedUp's and issueConsignmentPayouts' real
+// SQL against a real Postgres instance, the same way test/cart-concurrency.test.js does.
 //
 // Run with: node test/consignment-payout.test.js
 require('dotenv').config();
@@ -11,6 +11,7 @@ const assert = require('assert');
 const pool = require('../db/pool');
 const { markOrderPickedUp } = require('../lib/fulfillment');
 const { getBalanceCents } = require('../lib/store-credit');
+const { issueConsignmentPayouts } = require('../jobs/issue-consignment-payouts');
 
 const TEST_BIN_NUMBER = 999998;
 const TEST_PHONE = '5555550199';
@@ -58,21 +59,46 @@ async function run() {
   const ctx = await setup();
 
   await markOrderPickedUp(ctx.orderId);
-  const balanceAfterFirst = await getBalanceCents(pool, ctx.donorId);
+
+  const { rows: itemRows } = await pool.query('SELECT picked_up_at FROM items WHERE id = $1', [ctx.itemId]);
+  assert.ok(itemRows[0].picked_up_at, 'pickup should stamp picked_up_at');
+
+  const balanceRightAfterPickup = await getBalanceCents(pool, ctx.donorId);
   assert.strictEqual(
-    balanceAfterFirst,
-    1000,
-    `Expected $10.00 payout (50% of $20.00), got ${balanceAfterFirst} cents`
+    balanceRightAfterPickup,
+    0,
+    'credit must not be issued at pickup — only after the return window elapses'
   );
 
-  // A second call must be a no-op: the order is no longer 'ready_for_pickup', so
-  // markOrderPickedUp's own atomic guard throws before any payout logic runs again.
+  // The order-level guard is unrelated to payout timing, but must still hold.
   await assert.rejects(() => markOrderPickedUp(ctx.orderId), /was not in status 'ready_for_pickup'/);
-  const balanceAfterSecond = await getBalanceCents(pool, ctx.donorId);
-  assert.strictEqual(balanceAfterSecond, balanceAfterFirst, 'Repeat pickup must not double-pay');
+
+  // The item is still inside its 7-day return window — the job should find nothing yet.
+  const issuedWhileInWindow = await issueConsignmentPayouts();
+  assert.strictEqual(issuedWhileInWindow, 0, 'must not pay out before the return window has elapsed');
+  assert.strictEqual(await getBalanceCents(pool, ctx.donorId), 0);
+
+  // Backdate picked_up_at to simulate the return window having closed.
+  await pool.query(`UPDATE items SET picked_up_at = NOW() - INTERVAL '9 days' WHERE id = $1`, [ctx.itemId]);
+
+  const issuedAfterWindow = await issueConsignmentPayouts();
+  assert.strictEqual(issuedAfterWindow, 1, 'should pay out exactly one item once its return window has elapsed');
+  const balanceAfterPayout = await getBalanceCents(pool, ctx.donorId);
+  assert.strictEqual(
+    balanceAfterPayout,
+    1000,
+    `Expected $10.00 payout (50% of $20.00), got ${balanceAfterPayout} cents`
+  );
+
+  // A repeat run must not double-pay.
+  const issuedSecondRun = await issueConsignmentPayouts();
+  assert.strictEqual(issuedSecondRun, 0, 'repeat job run must not double-pay');
+  assert.strictEqual(await getBalanceCents(pool, ctx.donorId), balanceAfterPayout);
 
   await cleanup(ctx);
-  console.log('PASS: pickup issues exactly one 50% payout, repeat pickup does not double-pay.');
+  console.log(
+    'PASS: pickup no longer issues credit immediately; the payout job issues it exactly once, only after the return window elapses.'
+  );
 }
 
 run()

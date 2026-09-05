@@ -12,6 +12,7 @@ const staffRouter = require('./routes/staff');
 const { releaseExpiredCarts } = require('./jobs/release-carts');
 const { recalculatePrices } = require('./jobs/markdown');
 const { purgePhotos } = require('./jobs/purge-photos');
+const { issueConsignmentPayouts } = require('./jobs/issue-consignment-payouts');
 
 const app = express();
 
@@ -103,6 +104,12 @@ cron.schedule('0 3 * * *', () => {
 // Purges photos for items past their 7-day retention in a terminal state, daily at 03:30.
 cron.schedule('30 3 * * *', () => {
   purgePhotos().catch((err) => console.error('purge-photos job failed:', err));
+});
+
+// Issues consignment payouts for items whose 7-day return window has fully elapsed,
+// daily at 04:00.
+cron.schedule('0 4 * * *', () => {
+  issueConsignmentPayouts().catch((err) => console.error('issue-consignment-payouts job failed:', err));
 });
 
 const PORT = process.env.PORT || 3000;
