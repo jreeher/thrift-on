@@ -91,4 +91,8 @@ Following this codebase's existing convention (tests only for atomicity-sensitiv
 ## Out of scope for now
 
 - `jobs/issue-consignment-payouts.js` needs no change — a returned item leaves `picked_up` status entirely (landing on `active` or `removed`), so its existing `WHERE status = 'picked_up'` guard already excludes it automatically.
+
+## Accepted risks (v1)
+
+- **Concurrent returns on different items of the same multi-item order:** `processReturn` reads `orders.captured_amount_cents`/`refunded_amount_cents` outside any row lock before computing the card/credit split. Two returns on different items of the same order processed in close succession could both compute their split against the same stale "remaining" value. In practice Stripe's own refund validation bounds the damage — a request that would exceed what's actually still refundable on the PaymentIntent is rejected outright, so the realistic failure mode is a rejected second refund surfaced as an error (staff retries), not an actual over-refund. Same spirit as the concurrent-redemption risk already accepted in `2026-08-14-store-credit-design.md` — low probability for a single small store's staff-driven workflow, not worth a `SELECT ... FOR UPDATE` for v1. Revisit if this store ever runs multiple concurrent return-processing stations.
 - No UI change needed on the donor-facing side or the storefront — this is entirely a staff-facing addition.
