@@ -65,10 +65,17 @@
             </tr>
           </thead>
           <tbody>
+            <%
+              const ledgerReasonLabels = {
+                consignment_payout: 'Consignment payout',
+                redeemed_at_checkout: 'Redeemed at checkout',
+                return_credit_shortfall: 'Return credit'
+              };
+            %>
             <% ledger.forEach((entry) => { %>
               <tr>
                 <td><%= entry.created_at.toLocaleDateString() %></td>
-                <td><%= entry.reason === 'consignment_payout' ? 'Consignment payout' : 'Redeemed at checkout' %></td>
+                <td><%= ledgerReasonLabels[entry.reason] || entry.reason %></td>
                 <td class="<%= entry.amount_cents >= 0 ? 'ledger-credit' : 'ledger-debit' %>">
                   <%= entry.amount_cents >= 0 ? '+' : '−' %>$<%= (Math.abs(entry.amount_cents) / 100).toFixed(2) %>
                 </td>
