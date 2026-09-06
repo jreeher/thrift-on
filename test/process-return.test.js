@@ -98,6 +98,14 @@ async function run() {
   const { rows: orderARows } = await pool.query('SELECT refunded_amount_cents FROM orders WHERE id = $1', [orderA]);
   assert.strictEqual(orderARows[0].refunded_amount_cents, 2000, 'Scenario A: order refunded total updated');
 
+  const { rows: priceHistoryRows } = await pool.query(
+    `SELECT price_cents, reason FROM price_history WHERE item_id = $1`,
+    [itemA]
+  );
+  assert.strictEqual(priceHistoryRows.length, 1, 'Scenario A: relist writes exactly one price_history row');
+  assert.strictEqual(priceHistoryRows[0].price_cents, 2500, 'Scenario A: price_history records the reset price');
+  assert.strictEqual(priceHistoryRows[0].reason, 'return_relist', 'Scenario A: price_history reason is correct');
+
   // A second return attempt on the same item must be rejected — it's no longer picked_up.
   await assert.rejects(
     () => processReturn(itemA, { disposition: 'remove', reason: null }),
