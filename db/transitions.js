@@ -16,7 +16,8 @@ const VALID_TRANSITIONS = [
   ['sold_pending_pull', 'pulled'],
   ['pulled', 'picked_up'],
   ['pulled', 'active'],
-  ['active', 'expired']
+  ['active', 'expired'],
+  ['picked_up', 'active']
 ];
 
 function isValidTransition(fromStatus, toStatus) {
