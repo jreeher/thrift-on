@@ -2,6 +2,7 @@ const express = require('express');
 const { requireStaffAuth } = require('../middleware/auth');
 const { getFulfillmentQueue, markItemPulled, declineItem, markOrderPickedUp } = require('../lib/fulfillment');
 const { formatSlotTime } = require('../lib/pickup-schedule');
+const { getReturnEligibleOrders, searchOrdersForReturn, processReturn } = require('../lib/returns');
 
 const router = express.Router();
 
@@ -63,6 +64,35 @@ router.post(
     } catch (err) {
       console.error('markOrderPickedUp failed:', err.message);
       res.redirect(`/staff/fulfillment?error=${encodeURIComponent(err.message)}`);
+    }
+  })
+);
+
+router.get(
+  '/returns',
+  asyncHandler(async (req, res) => {
+    const query = (req.query.q || '').trim();
+    const orders = query ? await searchOrdersForReturn(query) : await getReturnEligibleOrders();
+    res.render('staff/returns', {
+      orders,
+      query,
+      searched: Boolean(query),
+      error: req.query.error || null
+    });
+  })
+);
+
+router.post(
+  '/items/:id/return',
+  asyncHandler(async (req, res) => {
+    const disposition = req.body.disposition;
+    const reason = (req.body.reason || '').trim() || null;
+    try {
+      await processReturn(Number(req.params.id), { disposition, reason });
+      res.redirect('/staff/returns');
+    } catch (err) {
+      console.error('processReturn failed:', err.message);
+      res.redirect(`/staff/returns?error=${encodeURIComponent(err.message)}`);
     }
   })
 );
