@@ -131,6 +131,8 @@ module.exports = {
 };
 ```
 
+> **Post-implementation amendment:** code review of Task 5 found that `createRefund` needed a Stripe idempotency key to make a duplicate call (e.g. a double-click on the return button) a safe no-op rather than a second real refund. The shipped signature is `createRefund(paymentIntentId, amountCents, idempotencyKey)`, passing `{ idempotencyKey }` as Stripe's request-options argument when provided. See Task 5's amendment note for the call site.
+
 - [ ] **Step 2: Verify syntax**
 
 Run: `node -c lib/stripe.js`
@@ -550,6 +552,26 @@ git add lib/returns.js
 git commit -m "Add processReturn: refund/credit split, item transition, ledger entry"
 ```
 
+> **Post-implementation amendment:** two fixes landed on top of this task after code review:
+> 1. The `createRefund` call now passes a Stripe idempotency key so a double-click or race can't issue two real refunds for the same return: `await createRefund(item.stripe_payment_intent, cardRefundCents, \`return_${itemId}_${item.order_id}\`)`. It's scoped to `${itemId}_${item.order_id}` (not just `itemId` alone) because an item can be relisted and resold after a return — scoping to the order makes the key unique per purchase-return episode permanently, not just within Stripe's 24-hour idempotency window.
+> 2. The `catch` block now logs loudly (matching `markOrderPickedUp`'s precedent in `lib/fulfillment.js`) if a refund already succeeded but the database transaction then failed:
+> ```js
+>   } catch (err) {
+>     await client.query('ROLLBACK');
+>     if (cardRefundCents > 0) {
+>       // The refund was already actually issued above — losing that fact here would be a
+>       // real accounting problem, not just a UI hiccup, so this is deliberately loud.
+>       console.error(
+>         `processReturn: refunded $${(cardRefundCents / 100).toFixed(2)} to the customer for item ${itemId}, but the database transaction failed afterward — needs manual reconciliation: ${err.message}`
+>       );
+>     }
+>     throw err;
+>   } finally {
+>     client.release();
+>   }
+> ```
+> Task 6's test below reflects this final shape (mocking `createRefund`'s three-argument signature and asserting the idempotency key it's called with).
+
 ---
 
 ### Task 6: Real-DB test for `processReturn`
@@ -581,8 +603,8 @@ const stripeLib = require('../lib/stripe');
 const refundCalls = [];
 // Patched before requiring lib/returns.js so its destructured createRefund binding picks
 // up this mock instead of a real Stripe call.
-stripeLib.createRefund = async (paymentIntentId, amountCents) => {
-  refundCalls.push({ paymentIntentId, amountCents });
+stripeLib.createRefund = async (paymentIntentId, amountCents, idempotencyKey) => {
+  refundCalls.push({ paymentIntentId, amountCents, idempotencyKey });
   return { id: 're_fake', amount: amountCents };
 };
 
@@ -646,6 +668,11 @@ async function run() {
   assert.deepStrictEqual(resultA, { cardRefundCents: 2000, shortfallCents: 0 }, 'Scenario A: full card refund, no shortfall');
   assert.strictEqual(refundCalls.length, 1, 'Scenario A: exactly one Stripe refund call');
   assert.strictEqual(refundCalls[0].amountCents, 2000, 'Scenario A: refund amount matches item price');
+  assert.strictEqual(
+    refundCalls[0].idempotencyKey,
+    `return_${itemA}_${orderA}`,
+    'Scenario A: idempotency key is scoped to this item AND this order'
+  );
 
   const { rows: itemARows } = await pool.query(
     'SELECT status, price_current_cents, returned_at, return_reason FROM items WHERE id = $1',
