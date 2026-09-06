@@ -11,7 +11,8 @@
     "test:markdown": "node test/markdown-idempotency.test.js",
     "test:purge-photos": "node test/purge-photos-idempotency.test.js",
     "test:issue-consignment-payouts": "node test/issue-consignment-payouts-idempotency.test.js",
-    "test": "npm run test:markdown && npm run test:purge-photos && npm run test:issue-consignment-payouts"
+    "test:return-split": "node test/return-split.test.js",
+    "test": "npm run test:markdown && npm run test:purge-photos && npm run test:issue-consignment-payouts && npm run test:return-split"
   },
   "license": "UNLICENSED",
   "dependencies": {
