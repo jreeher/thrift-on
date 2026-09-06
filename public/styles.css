@@ -1551,3 +1551,20 @@ body {
   background: #15642f;
   transform: translateY(-1px);
 }
+
+.return-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.5rem 0 0.7rem;
+}
+
+.return-reason-input {
+  flex: 1 1 160px;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--shop-border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.85rem;
+}

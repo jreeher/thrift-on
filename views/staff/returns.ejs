@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Returns</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <%- include('../partials/admin-header', { active: 'returns' }) %>
+
+  <main class="staff-page">
+    <h1>Returns</h1>
+
+    <% if (error) { %>
+      <p class="error"><%= error %></p>
+    <% } %>
+
+    <form method="GET" action="/staff/returns" class="bin-create-form">
+      <label>
+        Search by phone or order number
+        <input type="text" name="q" value="<%= query || '' %>" placeholder="(555) 123-4567 or TS-1042">
+      </label>
+      <button type="submit" class="secondary-btn">Search</button>
+    </form>
+
+    <% if (!searched) { %>
+      <p class="admin-hint">Showing pickups from the last 7 days.</p>
+    <% } %>
+
+    <% if (orders.length === 0) { %>
+      <p class="empty-state">
+        <%= searched ? 'No matching order found.' : 'No pickups within the return window.' %>
+      </p>
+    <% } %>
+
+    <% orders.forEach((order) => { %>
+      <section class="order-card">
+        <div class="order-card-header">
+          <strong class="order-number"><%= order.orderNumber %></strong>
+          <span class="order-customer">
+            <%= order.customerName %><% if (order.customerPhone) { %> &middot; <%= order.customerPhone %><% } %>
+          </span>
+        </div>
+
+        <% order.items.forEach((item) => { %>
+          <div class="fulfillment-item">
+            <div class="fulfillment-item-photo">
+              <% if (item.photoUrl) { %>
+                <img src="<%= item.photoUrl %>" alt="<%= item.title %>">
+              <% } else { %>
+                <div class="no-photo">No photo</div>
+              <% } %>
+            </div>
+            <div class="fulfillment-item-info">
+              <p class="fulfillment-item-title"><%= item.title %></p>
+              <p class="fulfillment-item-bin">Bin #<%= item.binNumber %></p>
+            </div>
+          </div>
+
+          <% if (item.eligible) { %>
+            <form method="POST" action="/staff/items/<%= item.id %>/return" class="return-form">
+              <input type="text" name="reason" class="return-reason-input" placeholder="Reason (optional)">
+              <button type="submit" name="disposition" value="relist" class="pull-btn">Return &amp; Relist</button>
+              <button type="submit" name="disposition" value="remove" class="decline-btn">Return &amp; Remove</button>
+            </form>
+          <% } else { %>
+            <p class="admin-hint">
+              Not eligible for return
+              (<%= item.status === 'picked_up' ? 'return window closed' : item.status %>).
+            </p>
+          <% } %>
+        <% }) %>
+      </section>
+    <% }) %>
+  </main>
+</body>
+</html>
