@@ -213,6 +213,20 @@ body {
   .admin-view-store-link {
     text-align: center;
   }
+
+  .admin-page {
+    padding: 1.5rem 1.25rem 3rem;
+  }
+
+  .review-card {
+    flex-direction: column;
+    gap: 1.25rem;
+    padding: 1.25rem;
+  }
+
+  .review-card-photo {
+    flex: 0 0 auto;
+  }
 }
 
 .error {

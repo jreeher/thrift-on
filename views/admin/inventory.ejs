@@ -24,7 +24,7 @@
 
     <% items.forEach((item) => { %>
       <% if (cardVariant === 'draft') { %>
-        <%- include('../partials/item-review-card', { item, categories }) %>
+        <%- include('../partials/item-review-card', { item, categories, returnTo: 'inventory' }) %>
       <% } else if (cardVariant === 'editable') { %>
         <%- include('../partials/item-editable-card', { item, categories }) %>
       <% } else { %>

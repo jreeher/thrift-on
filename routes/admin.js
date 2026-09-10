@@ -208,7 +208,12 @@ router.post(
       }
 
       await client.query('COMMIT');
-      res.redirect('/admin/inventory');
+      // Approving from the intake flow goes back to intake, ready for the next photo —
+      // approving from the general Inventory drafts tab stays on Inventory. Both pages
+      // render the same review-card form (views/partials/item-review-card.ejs), which
+      // stamps this hidden field so the route knows which one to return to.
+      const returnTo = req.body.return_to === 'intake' ? '/admin/intake' : '/admin/inventory';
+      res.redirect(returnTo);
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
